@@ -14,6 +14,7 @@ curl https://spr.codex.storage
 # Codex
 curl https://spr.codex.storage/testnet
 curl https://spr.codex.storage/testnet/codex
+curl https://spr.codex.storage/devnet/codex
 
 # Geth
 curl https://spr.codex.storage/testnet/geth
