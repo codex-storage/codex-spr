@@ -37,35 +37,57 @@ curl https://spr.codex.storage/testnet/geth
 
  3. Update files to S3
     ```shell
+    # Variables
     networks_file="codex"
     buckets="bucket-1 bucket-2"
+    folder="upload"
 
-    for bucket in ${buckets}; do
 
-      # Records
-      for file in *.txt; do
-        # Variables
-        network=$(awk -F '-' '{print $1}' <<< ${file})
-        nodes=$(awk -F '-' '{print $2}' <<< ${file%%.*})
-        echo "${network}" >> "${networks_file}"
+    # Networks records
+    mkdir -p "${folder}"
+    for file in *.txt; do
 
-        # Upload
-        if [[ "${nodes}" == "codex" ]]; then
-          aws s3 cp --acl public-read --content-type "text/plain" "${file}" "s3://${bucket}/${network}"
-        fi
-        aws s3 cp --acl public-read --content-type "text/plain" "${file}" "s3://${bucket}/${network}/${nodes}"
-      done
+      # Variables
+      network=$(awk -F '-' '{print $1}' <<< ${file})
+      nodes=$(awk -F '-' '{print $2}' <<< ${file%%.*})
+      echo "${network}" >> "${networks_file}"
 
-      # Networks
-      sort -u "${networks_file}" -o "${networks_file}"
-      aws s3 cp --acl public-read --content-type "text/plain" "${networks_file}" "s3://${bucket}/${networks_file}"
-
+      # Networks folders/files
+      mkdir -p "${folder}/${network}"
+      cp "${file}" "${folder}/${network}/${nodes}"
     done
 
-    rm -f "${networks_file}"
+    # Networks list
+    sort -u "${networks_file}" -o "${folder}/${networks_file}"
+
+    # Upload to S3
+    for bucket in ${buckets}; do
+
+      # Sync networks
+      aws s3 sync --acl public-read --content-type "text/plain" "${folder}" "s3://${bucket}" --delete
+
+      # Copy main node
+      for file in ${folder}/*/${networks_file}; do
+        network=$(awk -F '/' '{print $2}' <<< "${file}")
+        aws s3 cp --acl public-read --content-type "text/plain" "${file}" "s3://${bucket}/${network}"
+      done
+    done
+
+    # Cleanup
+    rm -rf "${folder}"
     ```
 
- 4. Check the result
+ 4. Flush cache
+    ```shell
+    # Variables
+    distribution_id="XXXXXXXXXXXXXX"
+
+    # Flush cache
+    invalidation_id=$(aws cloudfront create-invalidation --distribution-id "${distribution_id}" --paths "/*" | jq -r '.Invalidation.Id')
+    aws cloudfront wait invalidation-completed --distribution-id "${distribution_id}" --id "${invalidation_id}"
+    ```
+
+ 5. Check the result
     ```shell
     # Networks
     curl https://spr.codex.storage
